@@ -1,10 +1,11 @@
 """NetBox DNS (netbox-plugin-dns) DNS-01 authenticator plugin for Certbot.
 
-The TXT record required for the ACME dns-01 challenge is managed
-exclusively through the netbox-dns record API endpoint, via the bundled
-nbapi.py helper. The zone endpoint is never queried and the plugin never
-creates or deletes records: an existing TXT record (created beforehand in
-NetBox) is updated with the challenge token and left in place afterwards.
+The TXT records for the ACME dns-01 challenge are managed exclusively
+through the netbox-dns record API endpoint, via the bundled nbapi.py
+helper. The zone endpoint is never queried and the plugin never creates
+or deletes records: the challenge TXT records (created beforehand in
+NetBox, one per challenge token) are updated with the challenge tokens
+and left in place afterwards.
 
 Connection settings are taken from the environment, exactly as nbapi.py
 expects them:
@@ -59,8 +60,8 @@ class Authenticator(dns_common.DNSAuthenticator):
 
     def more_info(self) -> str:
         return (
-            "This plugin updates an existing DNS TXT record in netbox-dns "
-            "with the token of the dns-01 challenge."
+            "This plugin updates pre-provisioned DNS TXT records in "
+            "netbox-dns with the tokens of the dns-01 challenges."
         )
 
     def _setup_credentials(self) -> None:
@@ -106,8 +107,8 @@ class _NetboxDnsClient:
 
     Only the record API endpoint is used, so the API token needs no
     permissions on zones. Records are never created or deleted: the
-    challenge TXT record must already exist in NetBox and is updated in
-    place.
+    challenge TXT records must be provisioned beforehand in NetBox, one
+    per challenge token, and are updated in place.
     """
 
     def __init__(self, ttl: Optional[int] = None, insecure: bool = False):
@@ -118,6 +119,10 @@ class _NetboxDnsClient:
 
         self._nbapi = nbapi
         self._ttl = ttl
+        # record ids claimed by this certbot run; each challenge token gets
+        # its own pre-provisioned record so multiple tokens for the same
+        # name (e.g. apex and wildcard) do not overwrite each other.
+        self._claimed: set = set()
         if insecure:
             nbapi.disable_ssl_verify()
 
@@ -141,30 +146,43 @@ class _NetboxDnsClient:
             ) from e
 
     def update_txt_record(self, record_fqdn: str, validation: str) -> None:
-        """Write the challenge token into the existing TXT record."""
+        """Write the challenge token into one of the pre-provisioned records.
+
+        Each challenge token claims its own record so that several tokens
+        for the same name (e.g. apex and wildcard on one certificate) stay
+        live simultaneously.
+        """
         fqdn = self._fqdn(record_fqdn)
         records = self._get_txt_records(fqdn)
 
-        if any(record["value"] == validation for record in records):
-            logger.debug(
-                "TXT record for %s already has the expected value.", record_fqdn
-            )
-            return
+        for record in records:
+            if record["value"] == validation and not record.get("managed"):
+                self._claimed.add(record["id"])
+                logger.debug(
+                    "TXT record for %s already has the expected value.",
+                    record_fqdn,
+                )
+                return
 
-        existing = [record for record in records if not record.get("managed")]
-        if not existing:
+        existing = sorted(
+            (record for record in records if not record.get("managed")),
+            key=lambda record: record["id"],
+        )
+        free = [record for record in existing if record["id"] not in self._claimed]
+        if not free:
             raise errors.PluginError(
-                f"No updatable TXT record found for {record_fqdn} in view "
-                f"{search_view!r}. This plugin only updates existing records: "
-                "create the record once (type TXT) and rerun certbot."
+                f"Not enough TXT records for {record_fqdn} in view "
+                f"{search_view!r}: {len(existing)} record(s) exist, but all of "
+                "them are already in use by this certificate request. Add "
+                "another TXT record with the same name and rerun certbot."
             )
 
-        patch = {"id": existing[0]["id"], "value": validation}
+        target = free[0]
+        patch = {"id": target["id"], "value": validation}
         if self._ttl:
             patch["ttl"] = self._ttl
         self._nbapi.modify_dns_record(patch)
+        self._claimed.add(target["id"])
         logger.info(
-            "Updated TXT record %s (id %s).",
-            existing[0]["fqdn"],
-            existing[0]["id"],
+            "Updated TXT record %s (id %s).", target["fqdn"], target["id"]
         )

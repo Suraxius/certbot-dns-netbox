@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,9 @@ version = "1.0.0"
 description = "NetBox DNS (netbox-plugin-dns) DNS-01 authenticator plugin for Certbot"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "Apache-2.0" }
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Sven Luthi", email = "dev@sven.luethi.co" }]
 keywords = ["certbot", "acme", "letsencrypt", "netbox", "dns", "dns-01"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -16,6 +18,7 @@ classifiers = [
     "Intended Audience :: System Administrators",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Topic :: Internet :: WWW/HTTP",
     "Topic :: Security",
 ]
@@ -24,6 +27,10 @@ dependencies = [
     "requests>=2.20.0",
     "urllib3>=1.26",
 ]
+
+[project.urls]
+Homepage = "https://git.luethi.co/sven/certbot-dns-netbox"
+Repository = "https://git.luethi.co/sven/certbot-dns-netbox.git"
 
 [project.entry-points."certbot.plugins"]
 dns-netbox = "certbot_dns_netbox.dns_netbox:Authenticator"

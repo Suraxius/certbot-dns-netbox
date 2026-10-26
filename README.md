@@ -1,8 +1,10 @@
-# certbot-dns-netbox
+# Certbot DNS Netbox
 
-Certbot DNS-01 authenticator plugin that updates the challenge TXT record in
+Certbot DNS-01 authenticator plugin that updates the challenge TXT records in
 [NetBox DNS](https://github.com/sys4/netbox-plugin-dns) (the `netbox-dns`
 NetBox plugin) via the bundled `nbapi.py` API helper.
+
+***DISCLAIMER: THIS PROJECT IS VIBE CODED USING AN LLM.***
 
 ## How it works
 
@@ -13,16 +15,27 @@ and the plugin **never creates or deletes records**:
 
 1. looks up the existing TXT records for the FQDN (records can be filtered by
    `fqdn`, `zone` and `view` by name),
-2. writes the challenge token into the existing record. If the record does
-   not exist yet, certbot aborts with an error: create the record once
-   beforehand (in the NetBox UI or your tooling) and rerun,
-3. leaves the record in place after validation so it can be updated again on
-   the next renewal.
+2. writes each challenge token into one of the pre-provisioned records,
+   claiming one record per token,
+3. leaves the records in place after validation so they can be updated again
+   on the next renewal.
 
-Because a single record holds a single token, a certificate request must not
-combine a domain and its wildcard (`-d example.com -d '*.example.com'`): both
-map to the same `_acme-challenge.example.com` record, and the second token
-would overwrite the first. Issue those as separate certificates.
+### Provisioning
+
+The challenge TXT records must be created beforehand in netbox-dns, in the
+view configured via `search_view` (`certbot_dns_netbox/dns_netbox.py`,
+default: `global`). Each challenge token needs its own record:
+
+| Certificate request                                    | TXT records needed |
+| ------------------------------------------------------ | ------------------ |
+| `-d example.com` or `-d '*.example.com'`               | 1                  |
+| `-d example.com -d '*.example.com'` (apex + wildcard)  | 2                  |
+
+All records for a challenge share the same name (e.g. name
+`_acme-challenge.unifi` in zone `ewcs.ch`); netbox-dns allows multiple TXT
+records with different values for the same name. If a certificate request
+needs more records than exist, certbot aborts with an error. Renewals simply
+rewrite the values, so the records never need to be touched again.
 
 Connection settings are taken from the environment, exactly as `nbapi.py`
 expects them:
@@ -94,6 +107,6 @@ certbot certonly --dry-run \
     -d sub.example.com                # end-to-end against the staging ACME API
 ```
 
-Watch the `_acme-challenge` TXT record in the `global` view: its value changes
-to the challenge token during the run and remains in place afterwards. The
-next renewal updates the same record again.
+Watch the `_acme-challenge` TXT records in the `global` view: their values
+change to the challenge tokens during the run and remain in place afterwards.
+The next renewal updates the same records again.
