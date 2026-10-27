@@ -183,6 +183,4 @@ class _NetboxDnsClient:
             patch["ttl"] = self._ttl
         self._nbapi.modify_dns_record(patch)
         self._claimed.add(target["id"])
-        logger.info(
-            "Updated TXT record %s (id %s).", target["fqdn"], target["id"]
-        )
+        logger.info("Updated TXT record %s (id %s).", target["fqdn"], target["id"])

@@ -274,7 +274,7 @@ RESOURCES = {
     "vlan": "/ipam/vlans",
     "dns_view": "/plugins/netbox-dns/views/",
     "dns_zone": "/plugins/netbox-dns/zones/",
-    "dns_record": "/plugins/netbox-dns/records/"
+    "dns_record": "/plugins/netbox-dns/records/",
 }
 
 
