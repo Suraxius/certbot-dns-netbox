@@ -6,6 +6,41 @@ NetBox plugin) via the bundled `nbapi.py` API helper.
 
 ***DISCLAIMER: THIS PROJECT IS VIBE CODED USING AN LLM.***
 
+<a href="https://pypi.org/project/certbot-dns-netbox/">
+<img src="https://img.shields.io/pypi/v/certbot-dns-netbox" alt="PyPI">
+</a>
+<a href="https://github.com/Suraxius/certbot-dns-netbox/stargazers">
+<img src="https://img.shields.io/github/stars/Suraxius/certbot-dns-netbox?style=flat" alt="Stars Badge">
+</a>
+<a href="https://github.com/Suraxius/certbot-dns-netbox/network/members">
+<img src="https://img.shields.io/github/forks/Suraxius/certbot-dns-netbox?style=flat" alt="Forks Badge">
+</a>
+<a href="https://github.com/Suraxius/certbot-dns-netbox/issues">
+<img src="https://img.shields.io/github/issues/Suraxius/certbot-dns-netbox" alt="Issues Badge">
+</a>
+<a href="https://github.com/Suraxius/certbot-dns-netbox/pulls">
+<img src="https://img.shields.io/github/issues-pr/Suraxius/certbot-dns-netbox" alt="Pull Requests Badge">
+</a>
+<a href="https://github.com/Suraxius/certbot-dns-netbox/graphs/contributors">
+<img src="https://img.shields.io/github/contributors/Suraxius/certbot-dns-netbox?color=2b9348" alt="GitHub contributors">
+</a>
+<a href="https://github.com/Suraxius/certbot-dns-netbox/blob/master/LICENSE">
+<img src="https://img.shields.io/github/license/suraxius/certbot-dns-netbox?color=2b9348" alt="License Badge">
+</a>
+<a href="https://github.com/psf/black">
+<img src="https://img.shields.io/badge/code%20style-black-000000.svg" alt="Code Style Black">
+</a>
+<a href="https://pepy.tech/project/certbot-dns-netbox">
+<img src="https://static.pepy.tech/personalized-badge/certbot-dns-netbox?period=total&left_color=BLACK&right_color=BLUE&left_text=Downloads" alt="Downloads">
+</a>
+<a href="https://pepy.tech/project/certbot-dns-netbox">
+<img src="https://static.pepy.tech/personalized-badge/certbot-dns-netbox?period=monthly&left_color=BLACK&right_color=BLUE&left_text=Downloads%2fMonth" alt="Downloads/Month">
+</a>
+<a href="https://pepy.tech/project/certbot-dns-netbox">
+<img src="https://static.pepy.tech/personalized-badge/certbot-dns-netbox?period=weekly&left_color=BLACK&right_color=BLUE&left_text=Downloads%2fWeek" alt="Downloads/Week">
+</a>
+
+
 ## How it works
 
 For every domain in the certificate request certbot asks this plugin to set an
