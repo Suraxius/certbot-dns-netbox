@@ -1,4 +1,4 @@
-# Certbot DNS Netbox
+# Certbot DNS NetBox
 
 Certbot DNS-01 authenticator plugin that updates the challenge TXT records in
 [NetBox DNS](https://github.com/sys4/netbox-plugin-dns) (the `netbox-dns`
@@ -28,12 +28,67 @@ expects them:
 | `NETBOX_URL`    | Base URL of the NetBox instance            |
 | `NETBOX_BEARER` | NetBox API token (`Authorization: Bearer`) |
 | `NETBOX_TOKEN`  | NetBox API token (`Authorization: Token`)  |
-| `SEARCH_VIEW`   | NETBOX DNS View to search for records in.  |
+| `SEARCH_VIEW`   | NetBox DNS view to search for records in.  |
 | `DEBUG`         | Optional: verbose nbapi.py logging         |
 
 One of `NETBOX_BEARER` / `NETBOX_TOKEN` is required. The token's user needs
 NetBox object permissions to view and change netbox-dns records only — no
 zone or view permissions are required.
+
+
+## Usage
+
+```
+export NETBOX_URL=https://netbox.example.com
+export NETBOX_BEARER=<token>
+
+certbot certonly \
+    --authenticator dns-netbox \
+    --dns-netbox-propagation-seconds 60 \
+    -d example.com -d '*.example.com'
+```
+
+### Options
+
+| Option                             | Default        | Description                          |
+| ---------------------------------- | -------------- | ------------------------------------ |
+| `--dns-netbox-propagation-seconds` | `30`           | Seconds to wait for DNS propagation  |
+| `--dns-netbox-ttl`                 | keep current   | TTL of the challenge TXT record (s)  |
+| `--dns-netbox-insecure`            | off            | Skip TLS verification towards NetBox |
+
+The netbox-dns view to search is configured in code: `search_view` at the top
+of `certbot_dns_netbox/dns_netbox.py`.
+
+### Renewal configuration
+
+certbot stores the authenticator in the renewal configuration, so renewals
+need no extra flags:
+
+```
+# /etc/letsencrypt/renewal/example.com.conf
+[renewalparams]
+authenticator = dns-netbox
+dns_netbox_ttl = 120
+```
+
+When certbot runs unattended (cron or systemd timer), make sure the `NETBOX_*`
+environment variables are set, e.g. via a systemd `EnvironmentFile=` or a
+wrapper script.
+
+
+## Verification
+
+```
+certbot plugins --init dns-netbox     # plugin is discovered and loads
+certbot certonly --dry-run \
+    --authenticator dns-netbox \
+    -d sub.example.com                # end-to-end against the staging ACME API
+```
+
+Watch the `_acme-challenge` TXT records in the `_default_` view: their values
+change to the challenge tokens during the run and remain in place afterwards.
+The next renewal updates the same records again.
+
 
 ## Tutorial: end-to-end setup
 
@@ -42,10 +97,10 @@ wildcard, from scratch. Adapt domains, names and paths to your environment.
 
 ### 1. Create the DNS zone
 
-Create the `example.com` zone in netbox-dns, in the view the plugin searches
-(`SEARCH_VIEW` environment variable, default: `_default_`), and note the
-numeric **zone ID** of the new zone — it is shown in the web UI URL and can
-be looked up with:
+Create the `example.com` zone in netbox-dns, in the view the plugin will search
+(Set by `SEARCH_VIEW` environment variable, default: `_default_`). Note the
+numeric **zone ID** of the new zone — it is shown in the web UI URL and can be
+looked up with:
 
 ```
 GET /api/plugins/netbox-dns/zones/?name=example.com
@@ -163,62 +218,3 @@ And a cron entry, e.g. `/etc/cron.d/certbot-netbox`:
 authenticator flags are needed here. Add a `--deploy-hook` (e.g. restarting
 the web server) if services need to pick up the renewed certificate.
 
-## Installation
-
-Install into the same Python environment as certbot:
-
-```
-pip install certbot-dns-netbox
-```
-
-## Usage
-
-```
-export NETBOX_URL=https://netbox.example.com
-export NETBOX_BEARER=<token>
-
-certbot certonly \
-    --authenticator dns-netbox \
-    --dns-netbox-propagation-seconds 60 \
-    -d example.com -d '*.example.com'
-```
-
-### Options
-
-| Option                             | Default        | Description                          |
-| ---------------------------------- | -------------- | ------------------------------------ |
-| `--dns-netbox-propagation-seconds` | `30`           | Seconds to wait for DNS propagation  |
-| `--dns-netbox-ttl`                 | keep current   | TTL of the challenge TXT record (s)  |
-| `--dns-netbox-insecure`            | off            | Skip TLS verification towards NetBox |
-
-The netbox-dns view to search is configured in code: `search_view` at the top
-of `certbot_dns_netbox/dns_netbox.py`.
-
-### Renewal configuration
-
-certbot stores the authenticator in the renewal configuration, so renewals
-need no extra flags:
-
-```
-# /etc/letsencrypt/renewal/example.com.conf
-[renewalparams]
-authenticator = dns-netbox
-dns_netbox_ttl = 120
-```
-
-When certbot runs unattended (cron or systemd timer), make sure the `NETBOX_*`
-environment variables are set, e.g. via a systemd `EnvironmentFile=` or a
-wrapper script.
-
-## Verification
-
-```
-certbot plugins --init dns-netbox     # plugin is discovered and loads
-certbot certonly --dry-run \
-    --authenticator dns-netbox \
-    -d sub.example.com                # end-to-end against the staging ACME API
-```
-
-Watch the `_acme-challenge` TXT records in the `_default_` view: their values
-change to the challenge tokens during the run and remain in place afterwards.
-The next renewal updates the same records again.
