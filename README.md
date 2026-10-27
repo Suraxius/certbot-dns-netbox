@@ -28,6 +28,7 @@ expects them:
 | `NETBOX_URL`    | Base URL of the NetBox instance            |
 | `NETBOX_BEARER` | NetBox API token (`Authorization: Bearer`) |
 | `NETBOX_TOKEN`  | NetBox API token (`Authorization: Token`)  |
+| `SEARCH_VIEW`   | NETBOX DNS View to search for records in.  |
 | `DEBUG`         | Optional: verbose nbapi.py logging         |
 
 One of `NETBOX_BEARER` / `NETBOX_TOKEN` is required. The token's user needs
@@ -42,9 +43,9 @@ wildcard, from scratch. Adapt domains, names and paths to your environment.
 ### 1. Create the DNS zone
 
 Create the `example.com` zone in netbox-dns, in the view the plugin searches
-(`search_view` in `certbot_dns_netbox/dns_netbox.py`, default: `_default_`), and
-note the numeric **zone ID** of the new zone — it is shown in the web UI URL
-and can be looked up with:
+(`SEARCH_VIEW` environment variable, default: `_default_`), and note the
+numeric **zone ID** of the new zone — it is shown in the web UI URL and can
+be looked up with:
 
 ```
 GET /api/plugins/netbox-dns/zones/?name=example.com
