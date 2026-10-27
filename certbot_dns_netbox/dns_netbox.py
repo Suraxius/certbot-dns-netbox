@@ -26,7 +26,7 @@ from certbot.plugins import dns_common
 logger = logging.getLogger(__name__)
 
 # netbox-dns view that contains the zone with the challenge TXT record.
-search_view = "global"
+search_view = "_default_"
 
 
 class Authenticator(dns_common.DNSAuthenticator):
