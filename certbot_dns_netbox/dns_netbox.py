@@ -148,9 +148,13 @@ class _NetboxDnsClient:
     def update_txt_record(self, record_fqdn: str, validation: str) -> None:
         """Write the challenge token into one of the pre-provisioned records.
 
-        Each challenge token claims its own record so that several tokens
-        for the same name (e.g. apex and wildcard on one certificate) stay
-        live simultaneously.
+        Records claimed earlier in this certbot run are skipped so that
+        several tokens for the same name (e.g. apex and wildcard on one
+        certificate) stay live simultaneously. Among the remaining records,
+        the least recently updated one is chosen, according to the
+        timestamps NetBox keeps on the records themselves — that selection
+        needs no shared state, so separate certbot invocations for domains
+        sharing a record name still claim different records.
         """
         fqdn = self._fqdn(record_fqdn)
         records = self._get_txt_records(fqdn)
@@ -164,23 +168,32 @@ class _NetboxDnsClient:
                 )
                 return
 
-        existing = sorted(
-            (record for record in records if not record.get("managed")),
-            key=lambda record: record["id"],
-        )
-        free = [record for record in existing if record["id"] not in self._claimed]
+        free = [
+            record
+            for record in records
+            if not record.get("managed") and record["id"] not in self._claimed
+        ]
         if not free:
             raise errors.PluginError(
                 f"Not enough TXT records for {record_fqdn} in view "
-                f"{search_view!r}: {len(existing)} record(s) exist, but all of "
-                "them are already in use by this certificate request. Add "
-                "another TXT record with the same name and rerun certbot."
+                f"{search_view!r}: all existing records are already in use "
+                "by this certificate request. Add another TXT record with "
+                "the same name and rerun certbot."
             )
 
-        target = free[0]
+        # least recently updated record first; ties break on the record id.
+        target = min(
+            free,
+            key=lambda record: (
+                record.get("last_updated") or "",
+                record["id"],
+            ),
+        )
         patch = {"id": target["id"], "value": validation}
         if self._ttl:
             patch["ttl"] = self._ttl
         self._nbapi.modify_dns_record(patch)
         self._claimed.add(target["id"])
-        logger.info("Updated TXT record %s (id %s).", target["fqdn"], target["id"])
+        logger.info(
+            "Updated TXT record %s (id %s).", target["fqdn"], target["id"]
+        )
