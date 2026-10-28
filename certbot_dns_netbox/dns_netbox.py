@@ -2,10 +2,11 @@
 
 The TXT records for the ACME dns-01 challenge are managed exclusively
 through the netbox-dns record API endpoint, via the bundled nbapi.py
-helper. The zone endpoint is never queried and the plugin never creates
-or deletes records: the challenge TXT records (created beforehand in
-NetBox, one per challenge token) are updated with the challenge tokens
-and left in place afterwards.
+helper. The zone endpoint is never queried and the plugin never deletes
+records: existing challenge TXT records are updated with the challenge
+tokens, and a missing record is only created when no free record is left
+and the API token is permitted to create it. Records are left in place
+afterwards so they can be updated again on the next renewal.
 
 Connection settings are taken from the environment, exactly as nbapi.py
 expects them:
@@ -27,6 +28,8 @@ logger = logging.getLogger(__name__)
 
 # netbox-dns view that contains the zone with the challenge TXT record.
 search_view = os.environ.get("SEARCH_VIEW") or "_default_"
+
+RECORD_DESCRIPTION = "certbot DNS-01 challenge"
 
 
 class Authenticator(dns_common.DNSAuthenticator):
@@ -61,7 +64,9 @@ class Authenticator(dns_common.DNSAuthenticator):
     def more_info(self) -> str:
         return (
             "This plugin updates pre-provisioned DNS TXT records in "
-            "netbox-dns with the tokens of the dns-01 challenges."
+            "netbox-dns with the tokens of the dns-01 challenges, creating "
+            "additional records only when none are left and the token "
+            "permits it."
         )
 
     def _setup_credentials(self) -> None:
@@ -89,15 +94,15 @@ class Authenticator(dns_common.DNSAuthenticator):
             raise
         except Exception as e:
             raise errors.PluginError(
-                f"Failed to update TXT record {validation_name}: {e}"
+                f"Failed to set TXT record {validation_name}: {e}"
             ) from e
 
     def _cleanup(self, domain: str, validation_name: str, validation: str) -> None:
-        # The TXT record is managed outside of this plugin and must remain in
-        # place so that it can be updated again on the next renewal; deleting
-        # it would leave nothing to update.
+        # Records persist — including ones the plugin created — so they can
+        # be updated again on the next renewal; deleting them would leave
+        # nothing to update.
         logger.debug(
-            "Leaving TXT record %s in place (this plugin only updates records).",
+            "Leaving TXT record %s in place (records are reused, not deleted).",
             validation_name,
         )
 
@@ -106,9 +111,9 @@ class _NetboxDnsClient:
     """netbox-dns client built on the bundled nbapi helper.
 
     Only the record API endpoint is used, so the API token needs no
-    permissions on zones. Records are never created or deleted: the
-    challenge TXT records must be provisioned beforehand in NetBox, one
-    per challenge token, and are updated in place.
+    permissions on zones. Records are never deleted: existing challenge
+    TXT records are updated in place, and a record is only created when
+    no free record is left and the token is permitted to create it.
     """
 
     def __init__(self, ttl: Optional[int] = None, insecure: bool = False):
@@ -174,12 +179,8 @@ class _NetboxDnsClient:
             if not record.get("managed") and record["id"] not in self._claimed
         ]
         if not free:
-            raise errors.PluginError(
-                f"Not enough TXT records for {record_fqdn} in view "
-                f"{search_view!r}: all existing records are already in use "
-                "by this certificate request. Add another TXT record with "
-                "the same name and rerun certbot."
-            )
+            self._create_txt_record(record_fqdn, validation, records)
+            return
 
         # least recently updated record first; ties break on the record id.
         target = min(
@@ -196,4 +197,94 @@ class _NetboxDnsClient:
         self._claimed.add(target["id"])
         logger.info(
             "Updated TXT record %s (id %s).", target["fqdn"], target["id"]
+        )
+
+    def _resolve_zone(self, fqdn: str, existing_records: list) -> dict:
+        """Resolve the zone covering fqdn using the record endpoint only.
+
+        Any existing record exposes the zone it belongs to, so the zone id
+        can simply be harvested from it. Without records, candidate zone
+        names are probed against the record list filter; a zone without a
+        single visible record cannot provide an id and is referenced by
+        name instead, which requires view permission on the zone.
+        """
+        if existing_records:
+            zone = existing_records[0]["zone"]
+            return {"id": zone["id"], "name": zone["name"]}
+
+        bare = fqdn.rstrip(".").lower()
+        for candidate in dns_common.base_domain_name_guesses(bare):
+            try:
+                results = (
+                    self._nbapi.get_dns_record(
+                        {"zone": candidate, "view": search_view, "limit": 1},
+                        multi_exp=True,
+                    )
+                    or []
+                )
+            except requests.exceptions.HTTPError:
+                # the record filter rejects zone names that do not exist
+                continue
+            if results:
+                zone = results[0]["zone"]
+                return {"id": zone["id"], "name": zone["name"]}
+            # the zone exists, but none of its records are visible to this token
+            return {"name": candidate}
+        raise errors.PluginError(
+            f"No zone found for {fqdn!r} in view {search_view!r}."
+        )
+
+    def _create_txt_record(
+        self, record_fqdn: str, validation: str, existing_records: list
+    ) -> None:
+        """Create the challenge TXT record via the record endpoint.
+
+        Only called when no free record is left. The zone is resolved
+        through the record endpoint (see _resolve_zone); the created
+        record joins the pool of pre-provisioned records.
+        """
+        zone = self._resolve_zone(record_fqdn, existing_records)
+        zone_name = zone["name"].rstrip(".").lower()
+        bare = record_fqdn.rstrip(".").lower()
+        data = {
+            "zone": zone.get("id", {"name": zone["name"]}),
+            "name": "@" if bare == zone_name else bare[: -(len(zone_name) + 1)],
+            "type": "TXT",
+            "value": validation,
+            "description": RECORD_DESCRIPTION,
+        }
+        if self._ttl:
+            data["ttl"] = self._ttl
+
+        try:
+            created = self._nbapi.create_dns_record(data)
+        except Exception as create_error:
+            message = str(create_error)
+            hint = ""
+            if "Related object not found" in message:
+                hint = (
+                    " (referencing the zone by name requires view permission "
+                    "on the zone; alternatively pre-provision any record in "
+                    "the zone so that its id can be harvested via the record "
+                    "endpoint)"
+                )
+            elif "permission" in message.lower():
+                hint = (
+                    " (the API token likely lacks the add action for "
+                    "netbox-dns records; grant it, or pre-provision the "
+                    "record)"
+                )
+            raise errors.PluginError(
+                f"Failed to create TXT record for {record_fqdn}: "
+                f"{create_error}{hint}"
+            ) from create_error
+
+        record_id = created.get("id") if isinstance(created, dict) else None
+        if record_id:
+            self._claimed.add(record_id)
+        logger.info(
+            "Created TXT record %s in zone %s (view %s).",
+            data["name"],
+            zone_name,
+            search_view,
         )

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "certbot-dns-netbox"
-version = "1.0.2"
+version = "1.0.3"
 description = "NetBox DNS (netbox-plugin-dns) DNS-01 authenticator plugin for Certbot"
 readme = "README.md"
 requires-python = ">=3.9"
