@@ -4,7 +4,7 @@ Certbot DNS-01 authenticator plugin that updates the challenge TXT records in
 [NetBox DNS](https://github.com/sys4/netbox-plugin-dns) (the `netbox-dns`
 NetBox plugin) via the bundled `nbapi.py` API helper.
 
-***DISCLAIMER: THIS PROJECT IS VIBE CODED USING AN LLM.***
+***DISCLAIMER: THIS PROJECT IS A 100% VIBE-CODED PRODUCT.***
 
 <a href="https://pypi.org/project/certbot-dns-netbox/">
 <img src="https://img.shields.io/pypi/v/certbot-dns-netbox" alt="PyPI">
@@ -163,11 +163,10 @@ for sub-domains (`-d sub.example.com`) use a record named
 
 ### 3. Create a service user
 
-* Create a user group, e.g. `ACME Clients`, and assign the permission from
-  step 2 to the **group** — any service user added to the group later
-  inherits it.
-* Create a user, e.g. `certbot`, without a usable login, and make it a member
-  of the group.
+* Create a user, e.g. `certbot`, without a usable login, and assign the
+  permission from step 2 directly to the **user**.
+* Optionally create a group, e.g. `Service Accounts`, purely for organizing
+  service accounts, and make the user a member of it.
 
 ### 4. Pre-provision the TXT records
 
